@@ -1,6 +1,6 @@
 <?php
 
-$url = "https://vertical-footless-quintet.ngrok-free.dev/sistema-chamado/API/webhook.php";
+$url = "https://sistema-chamado-production.up.railway.app/API/webhook.php";
 
 $dados = [
     "nome" => "Davidson",
@@ -8,7 +8,7 @@ $dados = [
     "matricula" => "12345",
     "setor" => "Administracao",
     "categoria" => "Computador",
-    "descricao" => "Meu computador nao esta ligando",
+    "descricao" => "Teste da API online",
     "prioridade" => "Alta"
 ];
 
@@ -33,5 +33,4 @@ if ($resposta === false) {
 }
 
 curl_close($ch);
-
 ?>
