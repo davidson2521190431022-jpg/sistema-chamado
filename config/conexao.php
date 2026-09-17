@@ -1,10 +1,24 @@
 <?php
 
-$servidor = getenv('DB_HOST') ?: 'localhost';
-$porta = getenv('DB_PORT') ?: '3306';
-$banco = getenv('DB_NAME') ?: 'sistema_chamados';
-$usuario = getenv('DB_USER') ?: 'root';
-$senha = getenv('DB_PASSWORD') ?: '';
+$url = getenv('DATABASE_URL');
+
+if ($url) {
+    $partes = parse_url($url);
+
+    $servidor = $partes['host'] ?? 'localhost';
+    $porta = $partes['port'] ?? 3306;
+    $usuario = rawurldecode($partes['user'] ?? '');
+    $senha = rawurldecode($partes['pass'] ?? '');
+    $banco = isset($partes['path'])
+        ? ltrim($partes['path'], '/')
+        : '';
+} else {
+    $servidor = 'localhost';
+    $porta = 3306;
+    $usuario = 'root';
+    $senha = '';
+    $banco = 'sistema_chamados';
+}
 
 try {
     $pdo = new PDO(
