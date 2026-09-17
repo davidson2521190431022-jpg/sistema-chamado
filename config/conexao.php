@@ -1,28 +1,20 @@
 <?php
 
-$servidor = "localhost";
-$banco = "sistema_chamados";
-$usuario = "root";
-$senha = "";
+$servidor = getenv('DB_HOST') ?: 'localhost';
+$porta = getenv('DB_PORT') ?: '3306';
+$banco = getenv('DB_NAME') ?: 'sistema_chamados';
+$usuario = getenv('DB_USER') ?: 'root';
+$senha = getenv('DB_PASSWORD') ?: '';
 
 try {
-
     $pdo = new PDO(
-        "mysql:host=$servidor;dbname=$banco;charset=utf8",
+        "mysql:host=$servidor;port=$porta;dbname=$banco;charset=utf8mb4",
         $usuario,
         $senha
     );
 
-    $pdo->setAttribute(
-        PDO::ATTR_ERRMODE,
-        PDO::ERRMODE_EXCEPTION
-    );
-
-    echo "Banco conectado com sucesso!";
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 } catch (PDOException $e) {
-
-    echo "Erro na conexão: " . $e->getMessage();
-
+    die("Erro na conexão com o banco de dados.");
 }
-?>
