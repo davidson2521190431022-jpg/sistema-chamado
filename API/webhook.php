@@ -33,9 +33,9 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
 
 if ($_SERVER["REQUEST_METHOD"] === "GET") {
 
-    $modo = $_GET["hub.mode"] ?? "";
-    $token = $_GET["hub.verify_token"] ?? "";
-    $desafio = $_GET["hub.challenge"] ?? "";
+    $modo = $_GET["hub_mode"] ?? "";
+    $token = $_GET["hub_verify_token"] ?? "";
+    $desafio = $_GET["hub_challenge"] ?? "";
 
     $tokenCorreto = getenv("WHATSAPP_VERIFY_TOKEN") ?? "";
 
@@ -127,7 +127,6 @@ if (($dados["object"] ?? "") === "whatsapp_business_account") {
     $setor = "WhatsApp";
     $categoria = "Atendimento WhatsApp";
     $prioridade = "Media";
-
 } else {
 
     /*
@@ -201,7 +200,6 @@ try {
         "prioridade" => $prioridade,
         "status_chamado" => "Aberto"
     ]);
-
 } catch (PDOException $e) {
 
     http_response_code(500);
@@ -211,4 +209,3 @@ try {
         "detalhes" => $e->getMessage()
     ]);
 }
-?>
