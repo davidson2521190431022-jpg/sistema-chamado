@@ -4,8 +4,51 @@ header("Content-Type: application/json; charset=utf-8");
 
 require_once "../config/conexao.php";
 
+function enviarMensagemWhatsApp($destinatario, $mensagem)
+{
+    $token = getenv("WHATSAPP_ACCESS_TOKEN");
+    $phoneNumberId = getenv("WHATSAPP_PHONE_NUMBER_ID");
+    $versao = getenv("WHATSAPP_GRAPH_VERSION") ?: "v26.0";
+
+    if (!$token || !$phoneNumberId) {
+        return false;
+    }
+
+    $url = "https://graph.facebook.com/{$versao}/{$phoneNumberId}/messages";
+
+    $dados = [
+        "messaging_product" => "whatsapp",
+        "to" => $destinatario,
+        "type" => "text",
+        "text" => [
+            "body" => $mensagem
+        ]
+    ];
+
+    $ch = curl_init($url);
+
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            "Authorization: Bearer " . $token,
+            "Content-Type: application/json"
+        ],
+        CURLOPT_POSTFIELDS => json_encode($dados),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15
+    ]);
+
+    $resposta = curl_exec($ch);
+
+    curl_close($ch);
+
+    return $resposta;
+}
+
 /*
+|--------------------------------------------------------------------------
 | VERIFICAÇÃO DO WEBHOOK DA META
+|--------------------------------------------------------------------------
 */
 
 if ($_SERVER["REQUEST_METHOD"] === "GET") {
@@ -31,30 +74,14 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
     exit;
 }
 
-if ($_SERVER["REQUEST_METHOD"] === "GET") {
-
-    $modo = $_GET["hub_mode"] ?? "";
-    $token = $_GET["hub_verify_token"] ?? "";
-    $desafio = $_GET["hub_challenge"] ?? "";
-
-    $tokenCorreto = getenv("WHATSAPP_VERIFY_TOKEN") ?? "";
-
-    if (
-        $modo === "subscribe" &&
-        $tokenCorreto !== "" &&
-        hash_equals($tokenCorreto, $token)
-    ) {
-        http_response_code(200);
-        echo $desafio;
-        exit;
-    }
-
-    http_response_code(403);
-    echo "Token de verificacao invalido";
-    exit;
-}
+/*
+|--------------------------------------------------------------------------
+| ACEITA SOMENTE POST DEPOIS DA VERIFICAÇÃO
+|--------------------------------------------------------------------------
+*/
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+
     http_response_code(405);
 
     echo json_encode([
@@ -65,13 +92,16 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 }
 
 /*
+|--------------------------------------------------------------------------
 | LÊ O JSON
+|--------------------------------------------------------------------------
 */
 
 $conteudo = file_get_contents("php://input");
 $dados = json_decode($conteudo, true);
 
 if (!$dados) {
+
     http_response_code(400);
 
     echo json_encode([
@@ -82,14 +112,19 @@ if (!$dados) {
 }
 
 /*
-| WEBHOOK DA META
+|--------------------------------------------------------------------------
+| IDENTIFICA SE É WHATSAPP OU TESTE NORMAL
+|--------------------------------------------------------------------------
 */
 
-if (($dados["object"] ?? "") === "whatsapp_business_account") {
+$ehWhatsApp = (($dados["object"] ?? "") === "whatsapp_business_account");
+
+if ($ehWhatsApp) {
 
     $value = $dados["entry"][0]["changes"][0]["value"] ?? [];
 
     if (!isset($value["messages"][0])) {
+
         http_response_code(200);
 
         echo json_encode([
@@ -106,32 +141,27 @@ if (($dados["object"] ?? "") === "whatsapp_business_account") {
     $tipo = $mensagem["type"] ?? "";
 
     if ($tipo === "text") {
+
         $descricao = $mensagem["text"]["body"] ?? "";
+
     } else {
+
         $descricao = "Mensagem recebida pelo WhatsApp (" . $tipo . ")";
     }
-
-    /*
-     * Nesta primeira versão:
-     * - CPF ainda não foi informado
-     * - matrícula ainda não foi informada
-     * - setor recebe "WhatsApp"
-     * - categoria recebe "Atendimento WhatsApp"
-     *
-     * Depois podemos criar uma conversa automática
-     * para perguntar CPF, setor, categoria etc.
-     */
 
     $cpf = "Nao informado";
     $matricula = "";
     $setor = "WhatsApp";
     $categoria = "Atendimento WhatsApp";
     $prioridade = "Media";
+
 } else {
 
     /*
-     | MANTÉM O TESTE ANTIGO DA API
-     */
+    |--------------------------------------------------------------------------
+    | TESTE ANTIGO DA API
+    |--------------------------------------------------------------------------
+    */
 
     $nome = $dados["nome"] ?? "";
     $cpf = $dados["cpf"] ?? "";
@@ -143,7 +173,9 @@ if (($dados["object"] ?? "") === "whatsapp_business_account") {
 }
 
 /*
+|--------------------------------------------------------------------------
 | VALIDAÇÃO
+|--------------------------------------------------------------------------
 */
 
 if (
@@ -153,6 +185,7 @@ if (
     $categoria === "" ||
     $descricao === ""
 ) {
+
     http_response_code(400);
 
     echo json_encode([
@@ -163,7 +196,9 @@ if (
 }
 
 /*
+|--------------------------------------------------------------------------
 | SALVA O CHAMADO
+|--------------------------------------------------------------------------
 */
 
 try {
@@ -186,6 +221,28 @@ try {
         $prioridade
     ]);
 
+    /*
+    |--------------------------------------------------------------------------
+    | RESPONDE AUTOMATICAMENTE NO WHATSAPP
+    |--------------------------------------------------------------------------
+    */
+
+    if ($ehWhatsApp && $telefone !== "") {
+
+        $respostaWhatsApp =
+            "Olá, " . $nome . "! 👋\n\n" .
+            "Seu chamado foi registrado com sucesso.\n\n" .
+            "📋 Protocolo: " . $protocolo . "\n" .
+            "📌 Status: Aberto\n" .
+            "🏢 Setor: " . $setor . "\n\n" .
+            "Em breve seu atendimento será analisado.";
+
+        enviarMensagemWhatsApp(
+            $telefone,
+            $respostaWhatsApp
+        );
+    }
+
     http_response_code(200);
 
     echo json_encode([
@@ -200,6 +257,7 @@ try {
         "prioridade" => $prioridade,
         "status_chamado" => "Aberto"
     ]);
+
 } catch (PDOException $e) {
 
     http_response_code(500);
