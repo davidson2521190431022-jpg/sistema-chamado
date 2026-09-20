@@ -158,6 +158,51 @@ if ($ehWhatsApp) {
 
     $value = $dados["entry"][0]["changes"][0]["value"] ?? [];
 
+    /*
+    |--------------------------------------------------------------------------
+    | VERIFICA STATUS DAS MENSAGENS ENVIADAS
+    |--------------------------------------------------------------------------
+    */
+
+    if (isset($value["statuses"][0])) {
+
+        foreach ($value["statuses"] as $status) {
+
+            $messageId = $status["id"] ?? "";
+            $statusMensagem = $status["status"] ?? "";
+            $destinatario = $status["recipient_id"] ?? "";
+
+            error_log("WHATSAPP STATUS: " . $statusMensagem);
+            error_log("WHATSAPP MESSAGE ID: " . $messageId);
+            error_log("WHATSAPP DESTINATARIO: " . $destinatario);
+
+            if ($statusMensagem === "failed") {
+
+                error_log(
+                    "WHATSAPP FALHA: " .
+                    json_encode(
+                        $status["errors"] ?? [],
+                        JSON_UNESCAPED_UNICODE
+                    )
+                );
+            }
+        }
+
+        http_response_code(200);
+
+        echo json_encode([
+            "status" => "Status recebido"
+        ]);
+
+        exit;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | VERIFICA SE É UMA MENSAGEM RECEBIDA
+    |--------------------------------------------------------------------------
+    */
+
     if (!isset($value["messages"][0])) {
 
         http_response_code(200);
