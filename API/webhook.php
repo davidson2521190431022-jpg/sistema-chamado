@@ -4,13 +4,30 @@ header("Content-Type: application/json; charset=utf-8");
 
 require_once "../config/conexao.php";
 
+/*
+|--------------------------------------------------------------------------
+| ENVIA MENSAGEM PELO WHATSAPP
+|--------------------------------------------------------------------------
+*/
+
 function enviarMensagemWhatsApp($destinatario, $mensagem)
 {
     $token = getenv("WHATSAPP_ACCESS_TOKEN");
     $phoneNumberId = getenv("WHATSAPP_PHONE_NUMBER_ID");
     $versao = getenv("WHATSAPP_GRAPH_VERSION") ?: "v26.0";
 
-    if (!$token || !$phoneNumberId) {
+    if (!$token) {
+        error_log("WHATSAPP ERRO: WHATSAPP_ACCESS_TOKEN nao configurado.");
+        return false;
+    }
+
+    if (!$phoneNumberId) {
+        error_log("WHATSAPP ERRO: WHATSAPP_PHONE_NUMBER_ID nao configurado.");
+        return false;
+    }
+
+    if (!function_exists("curl_init")) {
+        error_log("WHATSAPP ERRO: extensao cURL nao esta instalada.");
         return false;
     }
 
@@ -25,6 +42,11 @@ function enviarMensagemWhatsApp($destinatario, $mensagem)
         ]
     ];
 
+    $jsonDados = json_encode(
+        $dados,
+        JSON_UNESCAPED_UNICODE
+    );
+
     $ch = curl_init($url);
 
     curl_setopt_array($ch, [
@@ -33,14 +55,22 @@ function enviarMensagemWhatsApp($destinatario, $mensagem)
             "Authorization: Bearer " . $token,
             "Content-Type: application/json"
         ],
-        CURLOPT_POSTFIELDS => json_encode($dados),
+        CURLOPT_POSTFIELDS => $jsonDados,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 15
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 20
     ]);
 
     $resposta = curl_exec($ch);
 
+    $erroCurl = curl_error($ch);
+    $codigoHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
     curl_close($ch);
+
+    error_log("WHATSAPP HTTP: " . $codigoHttp);
+    error_log("WHATSAPP CURL: " . ($erroCurl ?: "nenhum erro"));
+    error_log("WHATSAPP RESPOSTA: " . ($resposta ?: "resposta vazia"));
 
     return $resposta;
 }
@@ -70,13 +100,15 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
     }
 
     http_response_code(403);
+
     echo "Token de verificacao invalido";
+
     exit;
 }
 
 /*
 |--------------------------------------------------------------------------
-| ACEITA SOMENTE POST DEPOIS DA VERIFICAÇÃO
+| ACEITA SOMENTE POST
 |--------------------------------------------------------------------------
 */
 
@@ -98,6 +130,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 */
 
 $conteudo = file_get_contents("php://input");
+
 $dados = json_decode($conteudo, true);
 
 if (!$dados) {
@@ -117,7 +150,9 @@ if (!$dados) {
 |--------------------------------------------------------------------------
 */
 
-$ehWhatsApp = (($dados["object"] ?? "") === "whatsapp_business_account");
+$ehWhatsApp = (
+    ($dados["object"] ?? "") === "whatsapp_business_account"
+);
 
 if ($ehWhatsApp) {
 
@@ -137,7 +172,9 @@ if ($ehWhatsApp) {
     $mensagem = $value["messages"][0];
 
     $nome = $value["contacts"][0]["profile"]["name"] ?? "Cliente";
+
     $telefone = $mensagem["from"] ?? "";
+
     $tipo = $mensagem["type"] ?? "";
 
     if ($tipo === "text") {
@@ -150,9 +187,13 @@ if ($ehWhatsApp) {
     }
 
     $cpf = "Nao informado";
+
     $matricula = "";
+
     $setor = "WhatsApp";
+
     $categoria = "Atendimento WhatsApp";
+
     $prioridade = "Media";
 
 } else {
@@ -164,11 +205,17 @@ if ($ehWhatsApp) {
     */
 
     $nome = $dados["nome"] ?? "";
+
     $cpf = $dados["cpf"] ?? "";
+
     $matricula = $dados["matricula"] ?? "";
+
     $setor = $dados["setor"] ?? "";
+
     $categoria = $dados["categoria"] ?? "";
+
     $descricao = $dados["descricao"] ?? "";
+
     $prioridade = $dados["prioridade"] ?? "Media";
 }
 
@@ -256,7 +303,7 @@ try {
         "descricao" => $descricao,
         "prioridade" => $prioridade,
         "status_chamado" => "Aberto"
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 
 } catch (PDOException $e) {
 
@@ -265,5 +312,5 @@ try {
     echo json_encode([
         "erro" => "Erro ao criar chamado",
         "detalhes" => $e->getMessage()
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 }
