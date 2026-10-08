@@ -1,3 +1,4 @@
+```php
 <?php
 
 header("Content-Type: application/json; charset=utf-8");
@@ -68,9 +69,9 @@ function enviarMensagemWhatsApp($destinatario, $mensagem)
 
     curl_close($ch);
 
-    error_log("WHATSAPP HTTP: " . $codigoHttp);
-    error_log("WHATSAPP CURL: " . ($erroCurl ?: "nenhum erro"));
-    error_log("WHATSAPP RESPOSTA: " . ($resposta ?: "resposta vazia"));
+    error_log("WHATSAPP ENVIO HTTP: " . $codigoHttp);
+    error_log("WHATSAPP ENVIO CURL: " . ($erroCurl ?: "nenhum erro"));
+    error_log("WHATSAPP ENVIO RESPOSTA: " . ($resposta ?: "resposta vazia"));
 
     return $resposta;
 }
@@ -95,7 +96,9 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
         hash_equals($tokenCorreto, $token)
     ) {
         http_response_code(200);
+
         echo $desafio;
+
         exit;
     }
 
@@ -118,35 +121,48 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 
     echo json_encode([
         "erro" => "Metodo nao permitido"
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 
     exit;
 }
 
 /*
 |--------------------------------------------------------------------------
-| LÊ O JSON
+| LÊ O JSON RECEBIDO
 |--------------------------------------------------------------------------
 */
 
 $conteudo = file_get_contents("php://input");
 
+/*
+|--------------------------------------------------------------------------
+| LOG DE DIAGNÓSTICO
+|--------------------------------------------------------------------------
+*/
+
+error_log("========== WEBHOOK WHATSAPP ==========");
+error_log("METODO: " . $_SERVER["REQUEST_METHOD"]);
+error_log("PAYLOAD RECEBIDO: " . $conteudo);
+error_log("======================================");
+
 $dados = json_decode($conteudo, true);
 
 if (!$dados) {
+
+    error_log("WHATSAPP ERRO: JSON invalido.");
 
     http_response_code(400);
 
     echo json_encode([
         "erro" => "JSON invalido"
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 
     exit;
 }
 
 /*
 |--------------------------------------------------------------------------
-| IDENTIFICA SE É WHATSAPP OU TESTE NORMAL
+| IDENTIFICA SE É WHATSAPP
 |--------------------------------------------------------------------------
 */
 
@@ -154,26 +170,100 @@ $ehWhatsApp = (
     ($dados["object"] ?? "") === "whatsapp_business_account"
 );
 
+error_log(
+    "WEBHOOK: " .
+    ($ehWhatsApp ? "Evento WhatsApp" : "Requisicao normal")
+);
+
+/*
+|--------------------------------------------------------------------------
+| VARIÁVEIS
+|--------------------------------------------------------------------------
+*/
+
+$nome = "";
+$cpf = "";
+$matricula = "";
+$setor = "";
+$categoria = "";
+$descricao = "";
+$prioridade = "Media";
+$telefone = "";
+
+/*
+|--------------------------------------------------------------------------
+| PROCESSA EVENTO DO WHATSAPP
+|--------------------------------------------------------------------------
+*/
+
 if ($ehWhatsApp) {
 
     $value = $dados["entry"][0]["changes"][0]["value"] ?? [];
 
     /*
     |--------------------------------------------------------------------------
-    | VERIFICA STATUS DAS MENSAGENS ENVIADAS
+    | MENSAGEM RECEBIDA
     |--------------------------------------------------------------------------
     */
 
-    if (isset($value["statuses"][0])) {
+    if (isset($value["messages"][0])) {
+
+        error_log("WHATSAPP: MENSAGEM RECEBIDA.");
+
+        $mensagem = $value["messages"][0];
+
+        $nome = $value["contacts"][0]["profile"]["name"] ?? "Cliente";
+
+        $telefone = $mensagem["from"] ?? "";
+
+        $tipo = $mensagem["type"] ?? "";
+
+        error_log("WHATSAPP NOME: " . $nome);
+        error_log("WHATSAPP TELEFONE: " . $telefone);
+        error_log("WHATSAPP TIPO: " . $tipo);
+
+        if ($tipo === "text") {
+
+            $descricao = $mensagem["text"]["body"] ?? "";
+
+        } else {
+
+            $descricao = "Mensagem recebida pelo WhatsApp (" . $tipo . ")";
+        }
+
+        $cpf = "Nao informado";
+
+        $matricula = "";
+
+        $setor = "WhatsApp";
+
+        $categoria = "Atendimento WhatsApp";
+
+        $prioridade = "Media";
+
+        error_log("WHATSAPP DESCRICAO: " . $descricao);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | STATUS DE MENSAGENS
+    |--------------------------------------------------------------------------
+    */
+
+    else if (isset($value["statuses"][0])) {
 
         foreach ($value["statuses"] as $status) {
 
             $messageId = $status["id"] ?? "";
+
             $statusMensagem = $status["status"] ?? "";
+
             $destinatario = $status["recipient_id"] ?? "";
 
             error_log("WHATSAPP STATUS: " . $statusMensagem);
+
             error_log("WHATSAPP MESSAGE ID: " . $messageId);
+
             error_log("WHATSAPP DESTINATARIO: " . $destinatario);
 
             if ($statusMensagem === "failed") {
@@ -192,62 +282,40 @@ if ($ehWhatsApp) {
 
         echo json_encode([
             "status" => "Status recebido"
-        ]);
+        ], JSON_UNESCAPED_UNICODE);
 
         exit;
     }
 
     /*
     |--------------------------------------------------------------------------
-    | VERIFICA SE É UMA MENSAGEM RECEBIDA
+    | OUTRO EVENTO DA META
     |--------------------------------------------------------------------------
     */
 
-    if (!isset($value["messages"][0])) {
+    else {
+
+        error_log("WHATSAPP: Evento sem mensagem ou status.");
 
         http_response_code(200);
 
         echo json_encode([
             "status" => "Evento recebido"
-        ]);
+        ], JSON_UNESCAPED_UNICODE);
 
         exit;
     }
+}
 
-    $mensagem = $value["messages"][0];
+/*
+|--------------------------------------------------------------------------
+| TESTE NORMAL DA API
+|--------------------------------------------------------------------------
+*/
 
-    $nome = $value["contacts"][0]["profile"]["name"] ?? "Cliente";
+else {
 
-    $telefone = $mensagem["from"] ?? "";
-
-    $tipo = $mensagem["type"] ?? "";
-
-    if ($tipo === "text") {
-
-        $descricao = $mensagem["text"]["body"] ?? "";
-
-    } else {
-
-        $descricao = "Mensagem recebida pelo WhatsApp (" . $tipo . ")";
-    }
-
-    $cpf = "Nao informado";
-
-    $matricula = "";
-
-    $setor = "WhatsApp";
-
-    $categoria = "Atendimento WhatsApp";
-
-    $prioridade = "Media";
-
-} else {
-
-    /*
-    |--------------------------------------------------------------------------
-    | TESTE ANTIGO DA API
-    |--------------------------------------------------------------------------
-    */
+    error_log("API: Requisicao normal recebida.");
 
     $nome = $dados["nome"] ?? "";
 
@@ -278,24 +346,41 @@ if (
     $descricao === ""
 ) {
 
+    error_log("ERRO: Dados obrigatorios ausentes.");
+
+    error_log(
+        "DADOS: " .
+        json_encode([
+            "nome" => $nome,
+            "cpf" => $cpf,
+            "matricula" => $matricula,
+            "setor" => $setor,
+            "categoria" => $categoria,
+            "descricao" => $descricao,
+            "prioridade" => $prioridade
+        ], JSON_UNESCAPED_UNICODE)
+    );
+
     http_response_code(400);
 
     echo json_encode([
         "erro" => "Dados obrigatorios ausentes"
-    ]);
+    ], JSON_UNESCAPED_UNICODE);
 
     exit;
 }
 
 /*
 |--------------------------------------------------------------------------
-| SALVA O CHAMADO
+| SALVA O CHAMADO NO BANCO
 |--------------------------------------------------------------------------
 */
 
 try {
 
     $protocolo = date("YmdHis");
+
+    error_log("BANCO: Tentando salvar chamado.");
 
     $sql = "INSERT INTO chamados
         (nome, cpf, matricula, setor, categoria, descricao, prioridade, status)
@@ -313,6 +398,8 @@ try {
         $prioridade
     ]);
 
+    error_log("BANCO: Chamado salvo com sucesso.");
+
     /*
     |--------------------------------------------------------------------------
     | RESPONDE AUTOMATICAMENTE NO WHATSAPP
@@ -329,11 +416,19 @@ try {
             "🏢 Setor: " . $setor . "\n\n" .
             "Em breve seu atendimento será analisado.";
 
+        error_log("WHATSAPP: Enviando resposta automática.");
+
         enviarMensagemWhatsApp(
             $telefone,
             $respostaWhatsApp
         );
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | RESPOSTA DA API
+    |--------------------------------------------------------------------------
+    */
 
     http_response_code(200);
 
@@ -352,6 +447,8 @@ try {
 
 } catch (PDOException $e) {
 
+    error_log("BANCO ERRO: " . $e->getMessage());
+
     http_response_code(500);
 
     echo json_encode([
@@ -359,3 +456,4 @@ try {
         "detalhes" => $e->getMessage()
     ], JSON_UNESCAPED_UNICODE);
 }
+```
