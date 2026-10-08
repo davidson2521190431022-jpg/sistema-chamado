@@ -1,4 +1,4 @@
-```php
+
 <?php
 
 header("Content-Type: application/json; charset=utf-8");
@@ -456,4 +456,4 @@ try {
         "detalhes" => $e->getMessage()
     ], JSON_UNESCAPED_UNICODE);
 }
-```
+
